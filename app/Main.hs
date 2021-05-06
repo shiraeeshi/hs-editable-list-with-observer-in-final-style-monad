@@ -54,30 +54,31 @@ class EditableListApp m where
   updateActiveCellY :: Maybe Int -> m ()
   log :: String -> m ()
 
-newtype DictStateHolder a = Dict (StateT (AppStateData DictStateHolder) IO a) deriving (Functor, Applicative, Monad, MonadIO)
+newtype StateHolder a = StateHolder (StateT (AppStateData StateHolder) IO a)
+  deriving (Functor, Applicative, Monad, MonadIO)
 
-instance EditableListApp DictStateHolder where
-  getList = Dict $ rows <$> get
-  getActiveCellY = Dict $ activeCellY <$> get
-  getLogs = Dict $ debugMessages <$> get
+instance EditableListApp StateHolder where
+  getList = StateHolder $ rows <$> get
+  getActiveCellY = StateHolder $ activeCellY <$> get
+  getLogs = StateHolder $ debugMessages <$> get
 
   updateList l = do
-    Dict $ modify $ \s -> s { rows = l }
-    reacts <- Dict $ (rowsListeners . listeners) <$> get
+    StateHolder $ modify $ \s -> s { rows = l }
+    reacts <- StateHolder $ (rowsListeners . listeners) <$> get
     forM_ reacts ($ l) -- same as forM_ reacts $ \react -> react l
   updateActiveCellY y = do
-    Dict $ modify $ \s -> s { activeCellY = y }
-    s <- Dict $ get
+    StateHolder $ modify $ \s -> s { activeCellY = y }
+    s <- StateHolder $ get
     let reacts = activeCellYListeners (listeners s)
     forM_ reacts ($ y) -- same as forM_ reacts $ \react -> react y
   log msg = do
-    Dict $ modify $ \s -> s { debugMessages = take debugLinesCount (msg:(debugMessages s)) }
-    logs <- Dict $ debugMessages <$> get
-    reacts <- Dict $ (debugMessagesListeners . listeners) <$> get
+    StateHolder $ modify $ \s -> s { debugMessages = take debugLinesCount (msg:(debugMessages s)) }
+    logs <- StateHolder $ debugMessages <$> get
+    reacts <- StateHolder $ (debugMessagesListeners . listeners) <$> get
     forM_ reacts ($ logs) -- same as forM_ reacts $ \react -> react logs
 
-dictStateAction :: AppStateData DictStateHolder -> DictStateHolder a -> IO ()
-dictStateAction state (Dict action) = do
+dictStateAction :: AppStateData StateHolder -> StateHolder a -> IO ()
+dictStateAction state (StateHolder action) = do
   runStateT action state
   return ()
 
@@ -99,13 +100,13 @@ main = do
     columnWidth = 14
     rowCount = length initialRows
 
-    initialState :: AppStateData DictStateHolder
+    initialState :: AppStateData StateHolder
     initialState = AppState [] Nothing [] initListeners
 
-    initRows :: DictStateHolder ()
+    initRows :: StateHolder ()
     initRows = updateList initialRows
 
-    initListeners :: AppStateListenersData DictStateHolder
+    initListeners :: AppStateListenersData StateHolder
     -- initListeners =
     --     addRowsListener mainRowsListener
     --     (addActiveCellYListener activeCellYListener
@@ -119,7 +120,7 @@ main = do
       where
         empty = AppStateListeners [] [] []
 
-    mainRowsListener :: [RowData] -> DictStateHolder ()
+    mainRowsListener :: [RowData] -> StateHolder ()
     mainRowsListener rows = do
       activeCellCoords <- fmap (\y -> (0, y)) <$> getActiveCellY
       liftIO $ showInGrid
@@ -131,7 +132,7 @@ main = do
                  (map (\row -> [smth row]) rows)
       log "updated rows"
 
-    activeCellYListener :: Maybe Int -> DictStateHolder ()
+    activeCellYListener :: Maybe Int -> StateHolder ()
     activeCellYListener activeCellY = do
       let activeCellCoords = fmap (\y -> (0, y)) activeCellY
       liftIO $ drawGrid xUpperLeft yUpperLeft columnWidth columnCount rowCount
@@ -141,14 +142,14 @@ main = do
           liftIO $ highlightCell xUpperLeft yUpperLeft columnWidth columnCount rowCount coordsPair
           log "highlighted cell"
 
-    debugMessagesListener :: [String] -> DictStateHolder ()
+    debugMessagesListener :: [String] -> StateHolder ()
     debugMessagesListener debugMessages = do
       liftIO $ printFromBottom
                  xUpperLeft
                  (yUpperLeft+12+debugLinesCount)
                  debugMessages
 
-    loop :: DictStateHolder ()
+    loop :: StateHolder ()
     loop = do
       key <- liftIO $ getKey
       when (key /= "\ESC") $ do
@@ -187,7 +188,7 @@ main = do
                           then Left $ "index out of bounds: " ++ (show cellIndex)
                           else Right $ smth $ rows !! cellIndex
 
-                  showEditField :: String -> DictStateHolder ()
+                  showEditField :: String -> StateHolder ()
                   showEditField value = do
                     let
                       txt = "edit cell value:"
