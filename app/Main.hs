@@ -77,8 +77,8 @@ instance EditableListApp StateHolder where
     reacts <- StateHolder $ (debugMessagesListeners . listeners) <$> get
     forM_ reacts ($ logs) -- same as forM_ reacts $ \react -> react logs
 
-dictStateAction :: AppStateData StateHolder -> StateHolder a -> IO ()
-dictStateAction state (StateHolder action) = do
+performStateAction :: AppStateData StateHolder -> StateHolder a -> IO ()
+performStateAction state (StateHolder action) = do
   runStateT action state
   return ()
 
@@ -90,7 +90,7 @@ main = do
   hSetBuffering stdout NoBuffering
   hSetEcho stdin False
   clearScreen
-  dictStateAction initialState $ do
+  performStateAction initialState $ do
     initRows
     loop
   where
